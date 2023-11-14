@@ -3,6 +3,7 @@ from datetime import datetime
 
 from airflow import DAG
 from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.providers.common.sql.sensors.sql import SqlSensor
 
 default_args = {
     'owner': 'airflow',
@@ -26,3 +27,21 @@ with DAG('postgres_loader',
                                      sql=sql_query,
                                      dag=dag)
 
+    sql_sensor = SqlSensor(task_id='wait_for_condition',
+                           conn_id='my_postgres_connection',
+                           sql="SELECT COUNT(*) FROM sample_table WHERE key='hello'",
+                           mode='poke',
+                           poke_interval=30,
+                           dag=dag)
+
+    sql_query_confirm = '''
+            INSERT INTO sample_table (key, value)
+            VALUES ('sensor', 'confirmed')
+        '''
+
+    postgres_confirm_task = PostgresOperator(task_id='execute_sql_confirm_query',
+                                             postgres_conn_id='my_postgres_connection',
+                                             sql=sql_query_confirm,
+                                             dag=dag)
+
+postgres_task >> sql_sensor >> postgres_confirm_task
